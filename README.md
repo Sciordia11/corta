@@ -8,6 +8,8 @@ Acortador de URLs interno de la empresa.
 - Entrá al link corto (`/:codigo`) y te redirige a la URL original.
 - Consultá estadísticas de un link (clicks, URL, fecha de creación) en `stats.html`.
 
+Ver [`SPEC.md`](./SPEC.md) para el contrato detallado de cada endpoint y los casos borde.
+
 ## Correr el proyecto en local
 
 Requisitos: Node.js instalado.
@@ -31,4 +33,4 @@ test.js            smoke-test manual: node test.js (requiere el server levantado
 
 ## Estado
 
-Proyecto heredado de un desarrollador anterior sin documentación. Se está llevando a producción de forma incremental: ver el historial de commits para el proceso de orden y corrección. Próximo paso: `SPEC.md` con el contrato detallado del sistema.
+Proyecto heredado de un desarrollador anterior sin documentación. Se está llevando a producción de forma incremental: ver `SPEC.md` para el contrato del sistema y el historial de commits para el proceso de orden y corrección.
