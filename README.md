@@ -2,6 +2,8 @@
 
 Acortador de URLs interno de la empresa.
 
+**En producción:** https://corta-production-22b8.up.railway.app
+
 ## Qué hace
 
 - Acortá una URL larga y obtené un código corto (`/api/links`).
@@ -40,6 +42,10 @@ npm test
 
 Usa el test runner nativo de Node (`node --test`), sin dependencias extra. Cada archivo de test levanta la app en un puerto efímero y usa un `links.json` temporal, así que no toca los datos de ejemplo del repo.
 
+## Producción
+
+Desplegado en Railway: un servicio para la app (Node/Express, deploy directo desde este repo) y un servicio de PostgreSQL aparte. En local y en los tests se sigue usando `links.json`; en producción, `db/index.js` cambia automáticamente al backend de Postgres apenas detecta la variable `DATABASE_URL` (Railway la inyecta sola al enlazar los dos servicios). Los links y sus clicks sobreviven a un redeploy.
+
 ## Estado
 
-Proyecto heredado de un desarrollador anterior sin documentación. Se está llevando a producción de forma incremental: ver `SPEC.md` para el contrato del sistema y el historial de commits para el proceso de orden y corrección.
+Proyecto heredado de un desarrollador anterior sin documentación. Ya en producción: ver `SPEC.md` para el contrato del sistema y el historial de commits para el proceso de orden, corrección y despliegue.
