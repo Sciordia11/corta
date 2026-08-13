@@ -24,12 +24,21 @@ La app queda en `http://localhost:3000`.
 ## Estructura
 
 ```
-server.js          servidor Express: rutas y lógica de la app
+server.js          levanta el proceso en el puerto 3000
+app.js              la app de Express: rutas y lógica (sin levantar el server)
 utils.js           generación de códigos cortos
 links.json         "base de datos" de links (archivo JSON)
 public/            frontend estático (index.html, stats.html, estilos, logo)
-test.js            smoke-test manual: node test.js (requiere el server levantado)
+test/              batería de tests automatizados (node --test)
 ```
+
+## Correr los tests
+
+```bash
+npm test
+```
+
+Usa el test runner nativo de Node (`node --test`), sin dependencias extra. Cada archivo de test levanta la app en un puerto efímero y usa un `links.json` temporal, así que no toca los datos de ejemplo del repo.
 
 ## Estado
 
