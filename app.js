@@ -1,23 +1,10 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const utils = require('./utils');
+const db = require('./db');
 
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
-
-const DB_FILE = process.env.LINKS_DB_FILE
-  ? path.resolve(process.env.LINKS_DB_FILE)
-  : path.join(__dirname, 'links.json');
-
-function leerLinks() {
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-}
-
-function guardarLinks(links) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(links, null, 2));
-}
 
 function esUrlValida(valor) {
   if (typeof valor !== 'string' || valor.trim() === '') {
@@ -32,7 +19,8 @@ function esUrlValida(valor) {
 }
 
 // genera un código que todavía no esté en uso por otro link
-function generarCodigoUnico(links) {
+async function generarCodigoUnico() {
+  const links = await db.todosLosLinks();
   let codigo;
   do {
     codigo = utils.generarCodigo();
@@ -40,8 +28,17 @@ function generarCodigoUnico(links) {
   return codigo;
 }
 
+// las rutas son async (el backend de Postgres hace queries de red); esta
+// envoltura manda cualquier rechazo al error handler en vez de colgar la
+// request o tirar abajo el proceso con un unhandled rejection.
+function asyncHandler(fn) {
+  return function (req, res, next) {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
 // crear un link corto
-app.post('/api/links', (req, res) => {
+app.post('/api/links', asyncHandler(async (req, res) => {
   const { url } = req.body;
   if (!url) {
     return res.status(400).json({ error: 'Falta la url' });
@@ -49,23 +46,20 @@ app.post('/api/links', (req, res) => {
   if (!esUrlValida(url)) {
     return res.status(400).json({ error: 'URL inválida' });
   }
-  const links = leerLinks();
-  const codigo = generarCodigoUnico(links);
+  const codigo = await generarCodigoUnico();
   const nuevo = {
     codigo: codigo,
     url: url,
     clicks: 0,
     creado: new Date().toISOString()
   };
-  links.push(nuevo);
-  guardarLinks(links);
+  await db.crearLink(nuevo);
   res.json({ codigo: codigo, corta: '/' + codigo });
-});
+}));
 
 // estadísticas de un link: clicks, url original y fecha de creación
-app.get('/api/links/:codigo/stats', (req, res) => {
-  const links = leerLinks();
-  const link = links.find(function (l) { return l.codigo === req.params.codigo; });
+app.get('/api/links/:codigo/stats', asyncHandler(async (req, res) => {
+  const link = await db.buscarPorCodigo(req.params.codigo);
   if (!link) {
     return res.status(404).json({ error: 'No existe ese link' });
   }
@@ -75,18 +69,22 @@ app.get('/api/links/:codigo/stats', (req, res) => {
     clicks: link.clicks,
     creado: link.creado
   });
-});
+}));
 
 // redirigir al destino
-app.get('/:codigo', (req, res) => {
-  const links = leerLinks();
-  const link = links.find(function (l) { return l.codigo === req.params.codigo; });
+app.get('/:codigo', asyncHandler(async (req, res) => {
+  const link = await db.incrementarClick(req.params.codigo);
   if (!link) {
     return res.status(404).send('No existe ese link');
   }
-  link.clicks = link.clicks + 1;
-  guardarLinks(links);
   res.redirect(link.url);
+}));
+
+// último recurso: un error inesperado (ej. la base caída) no debe tirar
+// abajo el proceso ni colgar la request.
+app.use(function (err, req, res, next) {
+  console.error(err);
+  res.status(500).json({ error: 'Error interno' });
 });
 
-module.exports = { app, DB_FILE };
+module.exports = { app };

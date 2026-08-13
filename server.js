@@ -1,5 +1,7 @@
 const { app } = require('./app');
 
-app.listen(3000, function () {
-  console.log('Corta escuchando en http://localhost:3000');
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, function () {
+  console.log('Corta escuchando en el puerto ' + PORT);
 });
