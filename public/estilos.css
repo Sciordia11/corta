@@ -60,6 +60,12 @@ button:hover { background: #b5161f; }
 
 .oculto { display: none; }
 
+.error {
+  margin-top: 20px;
+  color: #da1b2e;
+  font-size: 0.9rem;
+}
+
 .stats { display: flex; gap: 12px; margin-top: 24px; }
 
 .stat {
