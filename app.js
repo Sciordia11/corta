@@ -19,14 +19,38 @@ function guardarLinks(links) {
   fs.writeFileSync(DB_FILE, JSON.stringify(links, null, 2));
 }
 
+function esUrlValida(valor) {
+  if (typeof valor !== 'string' || valor.trim() === '') {
+    return false;
+  }
+  try {
+    const parsed = new URL(valor);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// genera un código que todavía no esté en uso por otro link
+function generarCodigoUnico(links) {
+  let codigo;
+  do {
+    codigo = utils.generarCodigo();
+  } while (links.some(function (l) { return l.codigo === codigo; }));
+  return codigo;
+}
+
 // crear un link corto
 app.post('/api/links', (req, res) => {
   const { url } = req.body;
   if (!url) {
     return res.status(400).json({ error: 'Falta la url' });
   }
+  if (!esUrlValida(url)) {
+    return res.status(400).json({ error: 'URL inválida' });
+  }
   const links = leerLinks();
-  const codigo = utils.generarCodigo();
+  const codigo = generarCodigoUnico(links);
   const nuevo = {
     codigo: codigo,
     url: url,
@@ -46,7 +70,8 @@ app.get('/:codigo', (req, res) => {
     return res.status(404).send('No existe ese link');
   }
   link.clicks = link.clicks + 1;
-  res.send(link.url);
+  guardarLinks(links);
+  res.redirect(link.url);
 });
 
 module.exports = { app, DB_FILE };
