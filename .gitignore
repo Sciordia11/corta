@@ -3,3 +3,6 @@ node_modules/
 .DS_Store
 *.log
 test/fixtures/
+
+# Reporte autogenerado por la tarea programada (corta-scripts/reporte-cambios.ps1)
+CHANGES.md
