@@ -49,3 +49,5 @@ Desplegado en Railway: un servicio para la app (Node/Express, deploy directo des
 ## Estado
 
 Proyecto heredado de un desarrollador anterior sin documentación. Ya en producción: ver `SPEC.md` para el contrato del sistema y el historial de commits para el proceso de orden, corrección y despliegue.
+
+Auto-deploy desde GitHub activado: cada push a `main` dispara un deploy solo en Railway (confirmado con un commit de prueba el 14-08-2026).
