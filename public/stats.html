@@ -31,27 +31,46 @@
     const form = document.getElementById('form-stats');
     const stats = document.getElementById('stats');
     const error = document.getElementById('error');
+    const botonBuscar = form.querySelector('button');
+
+    function contarHasta(el, destino, duracionMs) {
+      const inicio = performance.now();
+      function paso(ahora) {
+        const t = Math.min((ahora - inicio) / duracionMs, 1);
+        const valor = Math.round(destino * (1 - Math.pow(1 - t, 3))); // ease-out
+        el.textContent = valor;
+        if (t < 1) requestAnimationFrame(paso);
+      }
+      requestAnimationFrame(paso);
+    }
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const codigo = document.getElementById('codigo').value.trim();
       stats.classList.add('oculto');
       error.classList.add('oculto');
+      botonBuscar.classList.add('cargando');
+      botonBuscar.disabled = true;
 
-      const res = await fetch('/api/links/' + encodeURIComponent(codigo) + '/stats');
+      try {
+        const res = await fetch('/api/links/' + encodeURIComponent(codigo) + '/stats');
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        error.textContent = data.error || 'No se pudo consultar ese código';
-        error.classList.remove('oculto');
-        return;
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          error.textContent = data.error || 'No se pudo consultar ese código';
+          error.classList.remove('oculto');
+          return;
+        }
+
+        const data = await res.json();
+        document.getElementById('stat-url').textContent = data.url;
+        document.getElementById('stat-creado').textContent = new Date(data.creado).toLocaleString();
+        stats.classList.remove('oculto');
+        contarHasta(document.getElementById('stat-clicks'), data.clicks, 600);
+      } finally {
+        botonBuscar.classList.remove('cargando');
+        botonBuscar.disabled = false;
       }
-
-      const data = await res.json();
-      document.getElementById('stat-clicks').textContent = data.clicks;
-      document.getElementById('stat-url').textContent = data.url;
-      document.getElementById('stat-creado').textContent = new Date(data.creado).toLocaleString();
-      stats.classList.remove('oculto');
     });
   </script>
 </body>

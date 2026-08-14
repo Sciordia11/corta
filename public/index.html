@@ -31,23 +31,42 @@
     const resultado = document.getElementById('resultado');
     const linkCorto = document.getElementById('link-corto');
 
+    const botonAcortar = form.querySelector('button');
+    const botonCopiar = document.getElementById('copiar');
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const url = document.getElementById('url').value;
-      const res = await fetch('/api/links', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-      const data = await res.json();
-      const corta = window.location.origin + data.corta;
-      linkCorto.textContent = corta;
-      linkCorto.href = corta;
-      resultado.classList.remove('oculto');
+      resultado.classList.add('oculto');
+      botonAcortar.classList.add('cargando');
+      botonAcortar.disabled = true;
+
+      try {
+        const res = await fetch('/api/links', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        const corta = window.location.origin + data.corta;
+        linkCorto.textContent = corta;
+        linkCorto.href = corta;
+        resultado.classList.remove('oculto');
+      } finally {
+        botonAcortar.classList.remove('cargando');
+        botonAcortar.disabled = false;
+      }
     });
 
-    document.getElementById('copiar').addEventListener('click', () => {
+    botonCopiar.addEventListener('click', () => {
       navigator.clipboard.writeText(linkCorto.textContent);
+      const textoOriginal = botonCopiar.textContent;
+      botonCopiar.textContent = '¡Copiado!';
+      botonCopiar.classList.add('copiado');
+      setTimeout(() => {
+        botonCopiar.textContent = textoOriginal;
+        botonCopiar.classList.remove('copiado');
+      }, 1500);
     });
   </script>
 </body>
