@@ -1,77 +1,106 @@
-# SPEC — Corta
+# SPEC: Corta
 
-Contrato de comportamiento de Corta: qué tiene que hacer cada endpoint, qué pasa en los casos borde, y qué significa que "las estadísticas dicen la verdad".
+Especificación del comportamiento esperado del acortador de URLs interno. Se escribe temprano, a partir de lo relevado del proyecto heredado, y se actualiza a medida que cambia el entendimiento (nuevos bugs encontrados, decisiones tomadas, milestones completados).
 
-Este documento describe el comportamiento **esperado** (correcto), no necesariamente el actual — es la referencia contra la que se escriben los tests y contra la que se corrige el código heredado. Se actualiza cada vez que el entendimiento del proyecto cambia.
+Última actualización: Milestone 5 completado (producción en Railway). El comportamiento descripto abajo es el actual — los bugs que originalmente motivaron este spec (Milestone 3 y 4) ya están corregidos e implementados; se dejan documentados como "bug corregido" para que quede registro de qué cambió.
+
+## Resumen
+
+Corta es un acortador de URLs interno. Un usuario pega una URL larga, recibe un código corto de 3 caracteres, y visitar `/:codigo` lo lleva al destino original. Se registra cuántas veces se usó cada link.
 
 ## Modelo de datos
 
-Un **link** tiene:
+Persistencia vía `storage.js`, que abstrae dos backends según `DATABASE_URL`:
 
-| Campo    | Tipo               | Descripción |
-|----------|--------------------|-------------|
-| `codigo` | string, 3 caracteres, `[a-z0-9]` | Identificador corto, único en todo el sistema |
-| `url`    | string (URL absoluta) | Destino al que redirige |
-| `clicks` | entero >= 0        | Cantidad de veces que alguien accedió a `/:codigo` y fue redirigido con éxito |
-| `creado` | string, ISO 8601 (UTC) | Momento de creación del link |
+- **Sin `DATABASE_URL`** (local/tests): `links.json` en la raíz del repo, un array de objetos, leído/escrito sync con `fs.readFileSync`/`writeFileSync`.
+- **Con `DATABASE_URL`** (producción, Railway): tabla `links` en Postgres, mismas columnas. Es lo que permite que los links y sus clicks sobrevivan a un redeploy (el filesystem del contenedor no persiste, la base sí).
 
-En desarrollo local persiste en `links.json`. En producción (Milestone 5) pasa a una base de datos real — el contrato de comportamiento de esta página no cambia, solo el almacenamiento.
+Forma del registro (misma en ambos backends):
+
+```json
+{
+  "codigo": "a3k",      // string, 3 caracteres [a-z0-9]
+  "url": "https://...", // string, URL de destino
+  "clicks": 0,           // number, entero >= 0
+  "creado": "2026-03-02T14:11:09.000Z" // string, ISO 8601, UTC
+}
+```
+
+`codigo` es único (ver "Generación de códigos y colisiones" más abajo).
 
 ## Endpoints
 
-### `POST /api/links` — crear un link corto
+### `POST /api/links`
 
-**Request:** `{ "url": "<string>" }`
+Crea un link corto.
 
-**Éxito:** `200` con `{ "codigo": "<string>", "corta": "/<codigo>" }`. Efecto secundario: se crea y persiste un nuevo link con `clicks: 0` y `creado` = timestamp ISO del momento de creación.
+**Request body:** `{ "url": "<string>" }`
 
-**Validación de `url` (caso borde: URLs inválidas):**
-- Falta el campo, es vacío, o no es un string → `400 { "error": "Falta la url" }`, no se crea nada.
-- El valor no es una URL absoluta válida (falla al parsear con `new URL(...)`, o el protocolo no es `http:`/`https:`) → `400 { "error": "URL inválida" }`, no se crea nada.
-- No hace falta que la URL de destino exista o responda — solo que tenga forma de URL válida.
+**Casos:**
 
-**Generación de código (caso borde: dos URLs reciben el mismo código):**
-- El código es de 3 caracteres alfanuméricos en minúscula (36³ = 46.656 combinaciones posibles).
-- Antes de asignar un código nuevo, el sistema **tiene que verificar que no exista ya** entre los links guardados. Si hay colisión, se genera otro código y se reintenta hasta encontrar uno libre.
-- Consecuencia: nunca puede haber dos links distintos con el mismo `codigo`. La respuesta es "nada malo, lo arreglamos" — el usuario ni se entera de que hubo una colisión interna.
+| Caso | Status | Respuesta |
+|---|---|---|
+| `url` ausente, vacío, o no-string | 400 | `{ "error": "Falta la url" }` |
+| `url` presente pero no es una URL válida (no parseable, sin protocolo `http`/`https`) | 400 | `{ "error": "URL inválida" }` |
+| `url` válida | 200 | `{ "codigo": "<3 chars>", "corta": "/<codigo>" }` |
 
-### `GET /:codigo` — redirigir al destino
+Al crear el link se persiste con `clicks: 0` y `creado` seteado al momento de creación (UTC, ISO 8601).
 
-**Si el código existe:**
-- Responde con un **redirect HTTP (302)** a `link.url` — el navegador tiene que terminar en la URL de destino, no ver la URL como texto.
-- Incrementa `clicks` en 1 **y lo persiste** antes de responder. Un click que no se guarda no cuenta como que pasó.
+La validación de URL (`esUrlValida` en `server.js`) exige que sea parseable con `new URL()` y que el protocolo sea `http:` o `https:`. Un string como `"hola"` ya devuelve 400.
 
-**Si el código no existe:** `404` con un mensaje de error claro (ej. `"No existe ese link"`). No rompe el servidor, no hay excepción sin manejar.
+### `GET /:codigo`
 
-**Casos que NO cuentan como click:** una request a un código inexistente no incrementa nada. Una consulta al endpoint de stats (`GET /api/links/:codigo/stats`) tampoco incrementa `clicks` — solo lo hace un acceso real a `/:codigo` que efectivamente redirige.
+Redirige al destino del link corto.
 
-### `GET /api/links/:codigo/stats` — estadísticas de un link
+**Casos:**
 
-*(Pendiente de implementar — Milestone 4. Documentado acá porque es parte del contrato del producto.)*
+| Caso | Status | Respuesta |
+|---|---|---|
+| `codigo` existe | **302**, header `Location: <url>` | redirect real del navegador |
+| `codigo` no existe | 404 | `No existe ese link` (texto plano) |
 
-**Si el código existe:** `200` con `{ "codigo", "url", "clicks", "creado" }` — los valores reales guardados, no datos de ejemplo.
+Cada visita exitosa (código encontrado) incrementa `clicks` en 1 y persiste el cambio antes de responder con el redirect.
 
-**Si el código no existe:** `404` con un mensaje de error claro. `public/stats.html` tiene que mostrar ese caso de forma legible (no una pantalla en blanco ni un crash del `fetch`).
+**Bug corregido (Milestone 3):** antes el servidor respondía `200` con la URL de destino como texto plano (`res.send(link.url)`) en vez de redirigir — el navegador se quedaba en `/:codigo` mostrando texto. Ahora usa `res.redirect(link.url)`, que emite el `302` real.
 
-**"Las estadísticas dicen la verdad" significa:** el número de `clicks` que se muestra es exactamente la cantidad de redirects exitosos que sirvió `/:codigo` para ese código — ni más (clicks fantasma por incrementos no atados a una visita real) ni menos (clicks que pasaron pero no se guardaron, como pasa hoy en el código heredado).
+### `GET /api/links/:codigo/stats`
 
-## Casos borde — resumen
+Devuelve las estadísticas de un link, sin modificarlo.
 
-| Caso | Comportamiento esperado |
-|---|---|
-| Dos URLs generan el mismo código al azar | Se detecta antes de guardar, se reintenta con otro código. Nunca dos links comparten `codigo`. |
-| `url` ausente, vacía o no-string | `400`, no se crea el link. |
-| `url` con formato inválido (no parsea como URL absoluta http/https) | `400`, no se crea el link. |
-| `GET /:codigo` con código inexistente | `404`, sin romper el servidor. |
-| `GET /api/links/:codigo/stats` con código inexistente | `404`, `stats.html` lo muestra de forma clara. |
-| Click en un link que existe | Redirect 302 real + `clicks` persistido, no solo en memoria. |
+**Casos:**
 
-## Persistencia entre despliegues
+| Caso | Status | Respuesta |
+|---|---|---|
+| `codigo` existe | 200 | `{ "codigo", "url", "clicks", "creado" }` |
+| `codigo` no existe | 404 | `{ "error": "No existe ese link" }` |
 
-Los links y sus clicks tienen que sobrevivir a un restart del proceso y a un redeploy en producción (Milestone 5). Esto excluye guardar el estado solo en memoria del proceso Node — tiene que quedar en disco (`links.json` en local) o en una base de datos real (producción).
+**Importante:** consultar las estadísticas **no** incrementa `clicks`. Solo `GET /:codigo` (la redirección real) cuenta como una visita. Esto es lo que hace que "las estadísticas digan la verdad" (ver sección dedicada).
 
-## Fuera de alcance (por ahora)
+`public/stats.html` (Milestone 4) llama a este endpoint y muestra clicks, URL original y fecha de creación reales — ya no hay datos hardcodeados.
 
-- Códigos personalizados (ej. `/mi-promo`) — quedó anotado como idea a futuro por el dev anterior, no forma parte del contrato actual.
-- Expiración de links.
-- Autenticación / control de quién puede crear links (Corta es de uso interno de la empresa, sin login por ahora).
+## Generación de códigos y colisiones
+
+`utils.js` genera códigos de 3 caracteres tomados al azar de `[a-z0-9]` (36 caracteres → 46,656 combinaciones posibles). Con `links.json` creciendo, la probabilidad de colisión no es despreciable (cumpleaños: con unos cientos de links ya es significativa).
+
+Al generar un código nuevo, `generarCodigoUnico()` (`utils.js`) verifica contra los códigos existentes y regenera si ya está en uso, hasta encontrar uno libre. Nunca se pisa un link existente ni se crea un duplicado.
+
+**Bug corregido (Milestone 3):** antes `generarCodigo()` no chequeaba contra los links existentes; si generaba un código repetido, `POST /api/links` agregaba una segunda entrada con el mismo `codigo`, y como `GET /:codigo` usaba `.find()` (primer match), el segundo link quedaba inaccesible silenciosamente. Ahora `generarCodigoUnico()` recibe la lista de códigos ya usados y regenera hasta obtener uno libre — "nada malo, lo arreglamos".
+
+## Qué significa "las estadísticas dicen la verdad"
+
+- `clicks` de un link refleja exactamente la cantidad de veces que se resolvió `GET /:codigo` para ese código — ni más, ni menos.
+- Consultar estadísticas (`GET /api/links/:codigo/stats`) es una operación de solo lectura: no incrementa `clicks`.
+- Cada visita a un `codigo` válido cuenta exactamente una vez. Escrituras concurrentes (dos requests casi simultáneos al mismo código) no deben pisarse ni perder un click.
+  - **En Postgres** (producción): `incrementarClicks` hace `UPDATE links SET clicks = clicks + 1 WHERE codigo = $1`, que es atómico a nivel fila — dos requests concurrentes no se pisan.
+  - **En `links.json`** (local/tests): sigue sin lock (`fs.readFileSync`/`writeFileSync` completos por request), así que dos requests concurrentes pueden leer el mismo estado viejo y el segundo `writeFileSync` pisa el incremento del primero (click perdido). Limitación conocida y aceptada del modo archivo — no afecta producción, que usa Postgres.
+- Un `codigo` inexistente nunca debe aparecer en las estadísticas como si tuviera actividad (404, no un objeto con `clicks: 0` inventado).
+
+## Fuera de alcance de este spec
+
+`index_v2_FINAL.js`, `server_OLD.js`, `links_backup_marzo.json`, `notas.txt`, `test.js` y `public/estilos_viejos.css` eran archivos muertos/duplicados del proyecto heredado (versiones viejas del server, un backup suelto, una credencial en texto plano, un smoke-test manual redundante con la batería TDD, y CSS sin referenciar). Milestone 2 los sacó del repo — no forman parte del comportamiento especificado.
+
+## Decisiones abiertas / a confirmar
+
+- **Formato exacto de validación de URL** en `POST /api/links`: por ahora, "parseable con `new URL()` y protocolo `http:`/`https:`". A confirmar si se necesita algo más laxo o más estricto.
+- **Longitud/alfabeto del código corto**: se mantiene en 3 caracteres `[a-z0-9]` (comportamiento heredado). Si el volumen de links crece, revisar si alcanza.
+- **Manejo de la concurrencia en el archivo JSON**: sin lock, limitación aceptada del modo local/tests (ver arriba). Producción usa Postgres y no tiene este problema.

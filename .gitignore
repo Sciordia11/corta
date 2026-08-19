@@ -3,6 +3,8 @@ node_modules/
 .DS_Store
 *.log
 test/fixtures/
+reportes/
+.claude/settings.local.json
 
 # Reporte autogenerado por la tarea programada (corta-scripts/reporte-cambios.ps1)
 CHANGES.md
