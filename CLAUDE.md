@@ -26,9 +26,10 @@ Corta es un acortador de URLs interno, heredado de un desarrollador anterior sin
 
 ## Pendiente
 
-- **Fixes de un review de código** (bugs y desfasajes de documentación) — ver `FIXES_PENDIENTES.md`.
+Los 4 fixes de un review de código anterior (`FIXES_PENDIENTES.md`) ya se resolvieron el 2026-08-19, al mergear este branch con el `main` del repo individual: self-XSS en el historial, error real de `POST /api/links` sin mostrar, la skill `/collect-memory` faltante, y este archivo desalineado. No queda nada abierto de ese review.
+
 - **Extra: trabajo en equipo** — invitar colaboradores de GitHub del resto del grupo, y que cada uno deje una tarea programada con reporte de cambios del repo. Ya hecho por al menos un integrante: skill `reporte-cambios` (`.claude/skills/reporte-cambios/SKILL.md`), que actualiza el repo local desde su remoto y escribe un reporte de commits nuevos (autor, archivos tocados) a `reportes/` (gitignored). Pensada para correr desatendida desde un cron: si hay cambios sin commitear o la rama divergió, se frena y reporta en vez de forzar nada (sin stash/reset/merge).
-- **Extra: memoria del agente** — skill `/collect-memory` que, al cerrar cada sesión, actualice este archivo con avances y preferencias del equipo. Ver `FIXES_PENDIENTES.md`.
+- **Extra: memoria del agente** — skill `/collect-memory` (`.claude/skills/collect-memory/SKILL.md`) ya construida; falta empezar a invocarla de verdad al cerrar cada sesión (el criterio de éxito de `mission.md` es que el historial de git de este archivo muestre sus actualizaciones).
 
 ## Decisiones y contexto que no salen de leer el código
 
